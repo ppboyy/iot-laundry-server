@@ -2,153 +2,198 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 
-// Example: Get all laundry machines
-router.get('/machines', async (req, res) => {
+// Get all machine readings with optional limit
+router.get('/readings', async (req, res) => {
   try {
-    const machines = await query('SELECT * FROM machines ORDER BY id');
+    const limit = parseInt(req.query.limit) || 100;
+    const readings = await query(
+      `SELECT id, data, created_at 
+       FROM machine_readings 
+       ORDER BY created_at DESC 
+       LIMIT $1`,
+      [limit]
+    );
+    
     res.json({
       success: true,
-      data: machines,
-      count: machines.length
+      data: readings,
+      count: readings.length
     });
   } catch (error) {
-    console.error('Error fetching machines:', error);
+    console.error('Error fetching readings:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch machines',
+      error: 'Failed to fetch readings',
       message: error.message
     });
   }
 });
 
-// Example: Get machine by ID
-router.get('/machines/:id', async (req, res) => {
+// Get reading by ID
+router.get('/readings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const machines = await query('SELECT * FROM machines WHERE id = ?', [id]);
+    const readings = await query(
+      'SELECT id, data, created_at FROM machine_readings WHERE id = $1',
+      [id]
+    );
     
-    if (machines.length === 0) {
+    if (readings.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Machine not found'
+        error: 'Reading not found'
       });
     }
     
     res.json({
       success: true,
-      data: machines[0]
+      data: readings[0]
     });
   } catch (error) {
-    console.error('Error fetching machine:', error);
+    console.error('Error fetching reading:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch machine',
+      error: 'Failed to fetch reading',
       message: error.message
     });
   }
 });
 
-// Example: Get machine status/logs
-router.get('/status', async (req, res) => {
+// Get readings for a specific machine ID
+router.get('/machines/:machineId/readings', async (req, res) => {
   try {
-    // Adjust table name and columns according to your database schema
-    const statuses = await query(`
-      SELECT * FROM machine_status 
-      ORDER BY timestamp DESC 
-      LIMIT 100
-    `);
+    const { machineId } = req.params;
+    const limit = parseInt(req.query.limit) || 100;
     
-    res.json({
-      success: true,
-      data: statuses,
-      count: statuses.length
-    });
-  } catch (error) {
-    console.error('Error fetching status:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch status',
-      message: error.message
-    });
-  }
-});
-
-// Example: Get latest status for a specific machine
-router.get('/machines/:id/status', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const statuses = await query(`
-      SELECT * FROM machine_status 
-      WHERE machine_id = ? 
-      ORDER BY timestamp DESC 
-      LIMIT 1
-    `, [id]);
+    const readings = await query(
+      `SELECT id, data, created_at 
+       FROM machine_readings 
+       WHERE data->>'MachineID' = $1 
+       ORDER BY created_at DESC 
+       LIMIT $2`,
+      [machineId, limit]
+    );
     
-    if (statuses.length === 0) {
+    if (readings.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'No status found for this machine'
+        error: 'No readings found for this machine'
       });
     }
     
     res.json({
       success: true,
-      data: statuses[0]
+      data: readings,
+      count: readings.length
     });
   } catch (error) {
-    console.error('Error fetching machine status:', error);
+    console.error('Error fetching machine readings:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch machine status',
+      error: 'Failed to fetch machine readings',
       message: error.message
     });
   }
 });
 
-// Example: Post new machine status (if your IoT devices push data)
-router.post('/status', async (req, res) => {
+// Get latest reading for a specific machine
+router.get('/machines/:machineId/latest', async (req, res) => {
   try {
-    const { machine_id, status, temperature, cycle_time } = req.body;
+    const { machineId } = req.params;
+    
+    const readings = await query(
+      `SELECT id, data, created_at 
+       FROM machine_readings 
+       WHERE data->>'MachineID' = $1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [machineId]
+    );
+    
+    if (readings.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No readings found for this machine'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: readings[0]
+    });
+  } catch (error) {
+    console.error('Error fetching latest reading:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch latest reading',
+      message: error.message
+    });
+  }
+});
+
+// Post new machine reading
+router.post('/readings', async (req, res) => {
+  try {
+    const { timestamp, MachineID, cycle_number, current, state } = req.body;
     
     // Validate required fields
-    if (!machine_id || !status) {
+    if (!MachineID || !state) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: machine_id and status are required'
+        error: 'Missing required fields: MachineID and state are required'
       });
     }
     
-    const result = await query(`
-      INSERT INTO machine_status (machine_id, status, temperature, cycle_time, timestamp)
-      VALUES (?, ?, ?, ?, NOW())
-    `, [machine_id, status, temperature || null, cycle_time || null]);
+    const data = {
+      timestamp: timestamp || new Date().toISOString(),
+      MachineID,
+      cycle_number: cycle_number || 0,
+      current: current || 0,
+      state
+    };
+    
+    const result = await query(
+      'INSERT INTO machine_readings (data) VALUES ($1) RETURNING id, data, created_at',
+      [JSON.stringify(data)]
+    );
     
     res.status(201).json({
       success: true,
-      message: 'Status recorded successfully',
-      data: { id: result.insertId }
+      message: 'Reading recorded successfully',
+      data: result[0]
     });
   } catch (error) {
-    console.error('Error posting status:', error);
+    console.error('Error posting reading:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to record status',
+      error: 'Failed to record reading',
       message: error.message
     });
   }
 });
 
-// Example: Get statistics/dashboard data
+// Get dashboard statistics
 router.get('/dashboard', async (req, res) => {
   try {
-    // Customize this query based on your actual database schema
+    // Get latest reading for each unique machine
     const stats = await query(`
+      WITH latest_readings AS (
+        SELECT DISTINCT ON (data->>'MachineID')
+          data->>'MachineID' as machine_id,
+          data->>'state' as state,
+          data->>'current' as current,
+          data->>'cycle_number' as cycle_number,
+          created_at
+        FROM machine_readings
+        ORDER BY data->>'MachineID', created_at DESC
+      )
       SELECT 
         COUNT(*) as total_machines,
-        SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running_machines,
-        SUM(CASE WHEN status = 'idle' THEN 1 ELSE 0 END) as idle_machines,
-        SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_machines
-      FROM machines
+        COUNT(CASE WHEN state = 'RUNNING' THEN 1 END) as running_machines,
+        COUNT(CASE WHEN state = 'IDLE' THEN 1 END) as idle_machines,
+        COUNT(CASE WHEN state = 'ERROR' THEN 1 END) as error_machines,
+        AVG(CAST(current AS FLOAT)) as avg_current
+      FROM latest_readings
     `);
     
     res.json({
@@ -160,6 +205,33 @@ router.get('/dashboard', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch dashboard data',
+      message: error.message
+    });
+  }
+});
+
+// Get list of all unique machines
+router.get('/machines', async (req, res) => {
+  try {
+    const machines = await query(`
+      SELECT DISTINCT 
+        data->>'MachineID' as machine_id,
+        MAX(created_at) as last_reading
+      FROM machine_readings
+      GROUP BY data->>'MachineID'
+      ORDER BY last_reading DESC
+    `);
+    
+    res.json({
+      success: true,
+      data: machines,
+      count: machines.length
+    });
+  } catch (error) {
+    console.error('Error fetching machines:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch machines',
       message: error.message
     });
   }
