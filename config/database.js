@@ -43,6 +43,9 @@ const initializeDatabase = async () => {
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
+      ssl: {
+        rejectUnauthorized: false // Required for AWS RDS
+      }
     });
 
     // Test connection
