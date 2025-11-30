@@ -182,7 +182,7 @@ def train_cnn(model, X_train, y_train, X_test, y_test, model_dir):
         callbacks=callbacks,
         class_weight=class_weight_dict,
         verbose=1
-    )   epochs=EPOCHS,
+       epochs=EPOCHS,
         batch_size=BATCH_SIZE,
         callbacks=callbacks,
         verbose=1
