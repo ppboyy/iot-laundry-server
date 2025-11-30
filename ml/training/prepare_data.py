@@ -131,15 +131,16 @@ def label_phases_rule_based(df):
         if p < 15:
             # Idle/Standby
             label = 'IDLE'
+        elif p > 300 or (p > 270 and p_avg > 250):
+            # Very high sustained power = SPIN
+            # SPIN: power > 300W OR (power > 270W AND average > 250W)
+            # This distinguishes sustained spin from rinse spikes
+            label = 'SPIN'
         elif p > 270:
-            # Very high power = SPIN or peak RINSE
-            # Use average to distinguish
-            if p_avg > 220:
-                label = 'SPIN'  # Sustained high = spin
-            else:
-                label = 'RINSE'  # Spike = rinse
+            # 270-300W without sustained average = likely RINSE spike
+            label = 'RINSE'
         elif p > 200:
-            # Above 200W (top 10% of data) = RINSE
+            # 200-270W = RINSE
             # These are the spike regions in your graph
             label = 'RINSE'
         elif p >= 15 and p <= 200:
@@ -156,16 +157,30 @@ def label_phases_rule_based(df):
     # Second pass: Expand RINSE windows to capture full rinse cycles
     # Each rinse cycle is several minutes long, not just the peak
     labels = df['phase'].values.copy()
-    window = 30  # Expand by 30 samples (~5 minutes) to capture full rinse cycle
+    rinse_window = 30  # Expand by 30 samples (~5 minutes) to capture full rinse cycle
     
     for i in range(len(labels)):
         if labels[i] == 'RINSE':
             # Mark surrounding samples as RINSE
-            start = max(0, i - window)
-            end = min(len(labels), i + window)
+            start = max(0, i - rinse_window)
+            end = min(len(labels), i + rinse_window)
             for j in range(start, end):
                 if labels[j] == 'WASHING':
                     labels[j] = 'RINSE'
+    
+    # Third pass: Expand SPIN windows and clean up SPIN/RINSE boundaries
+    # SPIN typically ramps up gradually and sustains
+    spin_window = 10  # Smaller window for spin (±2 minutes)
+    
+    for i in range(len(labels)):
+        if labels[i] == 'SPIN':
+            # Mark nearby high-power samples as SPIN (ramp up/down)
+            start = max(0, i - spin_window)
+            end = min(len(labels), i + spin_window)
+            for j in range(start, end):
+                if labels[j] == 'RINSE' and power.iloc[j] > 250:
+                    # High power near SPIN = likely part of spin cycle
+                    labels[j] = 'SPIN'
     
     df['phase'] = labels
     
