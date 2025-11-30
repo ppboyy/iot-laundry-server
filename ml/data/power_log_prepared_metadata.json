@@ -16,15 +16,15 @@
     "power_oscillation"
   ],
   "phases": {
-    "WASHING": 1426,
-    "RINSE": 801,
-    "SPIN": 134,
-    "IDLE": 96
+    "RINSE": 1510,
+    "WASHING": 781,
+    "SPIN": 129,
+    "IDLE": 37
   },
   "smoothing": {
     "method": "savitzky_golay",
-    "window_length": 11,
+    "window_length": 21,
     "polyorder": 3
   },
-  "created_at": "2025-11-30T18:34:07.501042"
+  "created_at": "2025-11-30T18:55:30.491913"
 }
