@@ -2,16 +2,16 @@
 # Generated models and data files
 
 # Data
-data/power_log_raw.csv
-data/power_log_prepared.csv
-data/*_metadata.json
+#data/power_log_raw.csv
+#data/power_log_prepared.csv
+#data/*_metadata.json
 
 # Models
-models/*.pkl
-models/*.h5
-models/*.tflite
-models/*.json
-models/*.png
+#models/*.pkl
+#models/*.h5
+#models/*.tflite
+#models/*.json
+#models/*.png
 
 # Python environment
 venv/
