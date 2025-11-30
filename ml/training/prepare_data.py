@@ -113,28 +113,39 @@ def label_phases_rule_based(df):
     print(f"\n🏷️  Generating rule-based phase labels...")
     
     power = df['power_smooth']
-    std = df['power_std_30s']
+    derivative = df['power_derivative']
+    oscillation = df['power_oscillation']
     
     # Initialize labels
     labels = []
     
     for i in range(len(df)):
         p = power.iloc[i]
-        s = std.iloc[i]
+        d = abs(derivative.iloc[i]) if i > 0 else 0
+        osc = oscillation.iloc[i]
         
-        # Rule-based classification from diagram
+        # Rule-based classification optimized for rinse detection
         if p < 15:
             label = 'IDLE'
         elif p > 280:
+            # Very high sustained power = SPIN
             label = 'SPIN'
-        elif p > 180 and p <= 280:
-            # High power with spikes = RINSE
+        elif p > 100 and (d > 5 or osc > 0.3):
+            # Medium-high power with high volatility/spikes = RINSE
+            # Rinse cycles have pumping (water in/out) causing power spikes
             label = 'RINSE'
-        elif p >= 15 and p <= 180:
-            # Medium power = WASHING
+        elif 40 <= p <= 150 and osc < 0.3:
+            # Moderate steady power = WASHING
+            # Washing has more stable power (drum rotation, heating)
+            label = 'WASHING'
+        elif p > 150:
+            # High power but smooth = likely RINSE (filling/draining)
+            label = 'RINSE'
+        elif 15 <= p < 40:
+            # Low power = WASHING (gentle agitation or pauses)
             label = 'WASHING'
         else:
-            label = 'UNKNOWN'
+            label = 'WASHING'  # Default to washing for ambiguous cases
         
         labels.append(label)
     
