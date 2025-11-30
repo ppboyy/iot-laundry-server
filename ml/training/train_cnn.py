@@ -119,10 +119,6 @@ def build_cnn_model(input_shape, n_classes):
         layers.Dense(n_classes, activation='softmax')
     ])
     
-    # Calculate class weights to handle imbalance
-    from sklearn.utils.class_utils import compute_class_weight
-    import numpy as np
-    
     model.compile(
         optimizer='adam',
         loss='sparse_categorical_crossentropy',
