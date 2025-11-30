@@ -11,26 +11,29 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:3000'];
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://iotwasher.com',
+  'https://www.iotwasher.com',
+  'https://iot-washer.vercel.app'
+];
 
-app.use(cors({
+const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.error(`❌ CORS blocked origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true
-}));
+};
 
-// Health check endpoint
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// ✅ Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -39,10 +42,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes
+// ✅ API routes
 app.use('/api', apiRoutes);
 
-// 404 handler
+// ✅ 404 handler
 app.use((req, res) => {
   res.status(404).json({ 
     error: 'Not Found',
@@ -50,7 +53,7 @@ app.use((req, res) => {
   });
 });
 
-// Error handling middleware
+// ✅ Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   res.status(err.status || 500).json({
@@ -59,7 +62,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize database and start server
+// ✅ Initialize database and start server
 const startServer = async () => {
   try {
     await initializeDatabase();
@@ -78,7 +81,7 @@ const startServer = async () => {
 
 startServer();
 
-// Graceful shutdown
+// ✅ Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
   process.exit(0);
@@ -88,3 +91,4 @@ process.on('SIGINT', () => {
   console.log('SIGINT signal received: closing HTTP server');
   process.exit(0);
 });
+
