@@ -113,39 +113,46 @@ def label_phases_rule_based(df):
     print(f"\n🏷️  Generating rule-based phase labels...")
     
     power = df['power_smooth']
-    derivative = df['power_derivative']
-    oscillation = df['power_oscillation']
+    power_max_30s = df['power_max_30s']
+    power_range_30s = df['power_range_30s']
     
     # Initialize labels
     labels = []
     
     for i in range(len(df)):
         p = power.iloc[i]
-        d = abs(derivative.iloc[i]) if i > 0 else 0
-        osc = oscillation.iloc[i]
+        p_max = power_max_30s.iloc[i]
+        p_range = power_range_30s.iloc[i]
         
-        # Rule-based classification optimized for rinse detection
+        # Rule-based classification based on actual power graph pattern
         if p < 15:
+            # Idle/Standby
             label = 'IDLE'
         elif p > 280:
-            # Very high sustained power = SPIN
+            # Sustained high power = SPIN
             label = 'SPIN'
-        elif p > 100 and (d > 5 or osc > 0.3):
-            # Medium-high power with high volatility/spikes = RINSE
-            # Rinse cycles have pumping (water in/out) causing power spikes
+        elif p > 250 or p_max > 280:
+            # Sharp spike or very high power = RINSE
+            # These are the pump/drain spikes during rinse cycles
             label = 'RINSE'
-        elif 40 <= p <= 150 and osc < 0.3:
-            # Moderate steady power = WASHING
-            # Washing has more stable power (drum rotation, heating)
+        elif p >= 150 and p <= 250:
+            # 150-250W range could be washing OR rinse
+            # Use power range to distinguish:
+            if p_range > 50 or p_max > 250:
+                # High volatility = RINSE (pumping causes fluctuations)
+                label = 'RINSE'
+            else:
+                # Steady power = WASHING
+                label = 'WASHING'
+        elif p >= 50 and p < 150:
+            # Lower-medium power = WASHING
+            # This is drum rotation, heating, gentle agitation
             label = 'WASHING'
-        elif p > 150:
-            # High power but smooth = likely RINSE (filling/draining)
-            label = 'RINSE'
-        elif 15 <= p < 40:
-            # Low power = WASHING (gentle agitation or pauses)
+        elif p >= 15 and p < 50:
+            # Low power = transition or gentle washing
             label = 'WASHING'
         else:
-            label = 'WASHING'  # Default to washing for ambiguous cases
+            label = 'WASHING'  # Default
         
         labels.append(label)
     
