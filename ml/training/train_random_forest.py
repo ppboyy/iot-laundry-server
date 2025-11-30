@@ -227,19 +227,21 @@ def main():
         # Create training windows
         X, y, feature_cols = create_training_windows(df, WINDOW_SIZE)
         
-    # Split train/test
-    print(f"\n✂️  Splitting data (train={1-TEST_SIZE:.0%}, test={TEST_SIZE:.0%})...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
-    )
-    print(f"   Train: {len(X_train)} samples")
-    print(f"   Test:  {len(X_test)} samples")
-    
-    # Calculate class weights to handle imbalance
-    from sklearn.utils.class_weight import compute_sample_weight
-    sample_weights = compute_sample_weight('balanced', y_train)        # Train model
-        model = train_random_forest(X_train, y_train, sample_weights)imbalanced dataset")        # Train model
-        model = train_random_forest(X_train, y_train)
+        # Split train/test
+        print(f"\n✂️  Splitting data (train={1-TEST_SIZE:.0%}, test={TEST_SIZE:.0%})...")
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+        )
+        print(f"   Train: {len(X_train)} samples")
+        print(f"   Test:  {len(X_test)} samples")
+        
+        # Calculate class weights to handle imbalance
+        from sklearn.utils.class_weight import compute_sample_weight
+        sample_weights = compute_sample_weight('balanced', y_train)
+        print(f"\n⚖️  Applied balanced class weights for imbalanced dataset")
+        
+        # Train model
+        model = train_random_forest(X_train, y_train, sample_weights)
         
         # Evaluate
         metrics = evaluate_model(model, X_train, y_train, X_test, y_test)
