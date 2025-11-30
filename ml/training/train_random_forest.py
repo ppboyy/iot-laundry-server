@@ -20,11 +20,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Configuration
-WINDOW_SIZE = 15  # Use last 15 samples (7.5 minutes) for prediction - more context
+WINDOW_SIZE = 12  # Use last 12 samples (6 minutes) for prediction
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
-N_ESTIMATORS = 200  # More trees for better accuracy
-MAX_DEPTH = 20  # Deeper trees to capture complex patterns
+N_ESTIMATORS = 300  # More trees for better accuracy
+MAX_DEPTH = 25  # Deeper trees to capture complex patterns
+MIN_SAMPLES_SPLIT = 3  # Allow finer splits
+MIN_SAMPLES_LEAF = 1  # More detailed leaves
 
 def load_prepared_data(data_path):
     """Load prepared data from STEP 1-3"""
@@ -82,12 +84,14 @@ def train_random_forest(X_train, y_train, sample_weights=None):
     model = RandomForestClassifier(
         n_estimators=N_ESTIMATORS,
         max_depth=MAX_DEPTH,
-        min_samples_split=5,
-        min_samples_leaf=2,
+        min_samples_split=MIN_SAMPLES_SPLIT,
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        max_features='sqrt',  # Use sqrt of features for each split
+        bootstrap=True,
+        oob_score=True,  # Out-of-bag score estimation
         random_state=RANDOM_STATE,
         n_jobs=-1,  # Use all CPU cores
-        verbose=1,
-        class_weight='balanced'  # Handle class imbalance
+        verbose=1
     )
     
     model.fit(X_train, y_train, sample_weight=sample_weights)
@@ -235,15 +239,20 @@ def main():
         print(f"   Train: {len(X_train)} samples")
         print(f"   Test:  {len(X_test)} samples")
         
-        # Calculate class weights to handle imbalance
-        from sklearn.utils.class_weight import compute_sample_weight
-        sample_weights = compute_sample_weight('balanced', y_train)
-        print(f"\n⚖️  Applied balanced class weights for imbalanced dataset")
+        # Apply SMOTE to balance classes
+        print(f"\n⚖️  Applying SMOTE to balance dataset...")
+        from imblearn.over_sampling import SMOTE
+        smote = SMOTE(random_state=RANDOM_STATE, k_neighbors=3)
+        X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
         
-        # Train model
-        model = train_random_forest(X_train, y_train, sample_weights)
-        
-        # Evaluate
+        print(f"   Before SMOTE: {len(X_train)} samples")
+        print(f"   After SMOTE:  {len(X_train_balanced)} samples")
+        unique, counts = np.unique(y_train_balanced, return_counts=True)
+        for label, count in zip(unique, counts):
+            print(f"      {label:12s}: {count:4d}")
+    
+    # Train model
+        model = train_random_forest(X_train_balanced, y_train_balanced, sample_weights=None)        # Evaluate
         metrics = evaluate_model(model, X_train, y_train, X_test, y_test)
         
         # Plot confusion matrix
