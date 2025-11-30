@@ -1,0 +1,26 @@
+# ML Training Directory - DO NOT DEPLOY
+# Generated models and data files
+
+# Data
+data/power_log_raw.csv
+data/power_log_prepared.csv
+data/*_metadata.json
+
+# Models
+models/*.pkl
+models/*.h5
+models/*.tflite
+models/*.json
+models/*.png
+
+# Python environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Training outputs
+*.log
+training_history.png
+confusion_matrix.png

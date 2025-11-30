@@ -11,6 +11,8 @@ Shelly Plug (Power) ──┘                                                   
                                                                                       ├──> REST API ──> Vercel Frontend
                                                                                       │
                                                             Raspberry Pi Monitor Script publishes aggregated data every 30s
+                                                                                      
+                                                            ML Training (EC2/Cloud) trains phase detection models
 ```
 
 ## Features
@@ -22,6 +24,7 @@ Shelly Plug (Power) ──┘                                                   
 - **Live Status Table**: Always contains current state of 4 machines (WM-01 to WM-04)
 - **Historical Log Table**: Append-only log of all data submissions
 - **CORS Configured**: Ready for Vercel frontend integration
+- **🆕 ML Training Pipeline**: Cloud-based training for washing machine phase detection (Random Forest & 1D CNN)
 
 ## Components
 
@@ -369,8 +372,53 @@ iot-laundry-server/
 │   ├── AmazonRootCA1.pem
 │   ├── device.pem.crt
 │   └── private.pem.key
+├── ml/                       # 🆕 Machine Learning Training Pipeline
+│   ├── data/                 # Training datasets
+│   ├── models/               # Trained models (Random Forest, CNN)
+│   ├── training/             # Training scripts
+│   ├── README.md             # Detailed ML documentation
+│   ├── QUICKSTART.md         # Quick training guide
+│   └── requirements.txt      # Python dependencies
 └── IOT_SUBSCRIBER_SETUP.md   # Detailed setup guide for EC2
 ```
+
+## 🤖 Machine Learning Phase Detection
+
+This repository now includes a complete ML training pipeline for washing machine phase detection.
+
+### Quick Start
+
+```bash
+cd ml
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Prepare training data
+python training/prepare_data.py
+
+# Train model (choose one)
+python training/train_random_forest.py  # Fast, 90-92% accuracy
+python training/train_cnn.py            # Best, 93-96% accuracy
+```
+
+### Features
+- **Savitzky-Golay filtering** for optimal smoothing
+- **Random Forest** classifier (~90-92% accuracy, <10ms inference)
+- **1D CNN** classifier (~93-96% accuracy, ~50ms inference)
+- **Automatic feature extraction** from power consumption patterns
+- **Rule-based labeling** with state machine constraints
+- **TensorFlow Lite export** for Raspberry Pi deployment
+
+### Detected Phases
+- **IDLE**: < 15W (standby)
+- **WASHING**: 15-180W (washing, filling, agitation)
+- **RINSE**: 180-280W (drain/refill cycles with spikes)
+- **SPIN**: > 280W (high-speed spinning)
+
+For detailed documentation, see:
+- `ml/README.md` - Complete ML pipeline documentation
+- `ml/QUICKSTART.md` - 3-step training guide
 
 ## Related Repositories
 
