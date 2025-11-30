@@ -35,3 +35,9 @@ build/
 
 # AWS IoT Core certificates
 certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+laundry-iot.pem
