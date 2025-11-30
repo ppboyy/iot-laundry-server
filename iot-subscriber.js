@@ -1,6 +1,6 @@
 require('dotenv').config();
 const awsIot = require('aws-iot-device-sdk');
-const { initializeDatabase, query } = require('./config/database');
+const { initializeDatabase, createTables, query } = require('./config/database');
 
 console.log('🚀 Starting AWS IoT Core Subscriber...\n');
 
@@ -14,6 +14,7 @@ const startSubscriber = async () => {
     try {
         console.log('🔧 Initializing database connection...');
         await initializeDatabase();
+        await createTables();
         dbReady = true;
         console.log('✅ Database ready\n');
         
@@ -75,13 +76,22 @@ function setupDeviceHandlers(device) {
             console.log(`   Power: ${data.current}W`);
             console.log(`   Cycle: ${data.cycle_number}`);
             
-            // Insert into database
+            // Insert into log table (historical data)
             await query(
-                'INSERT INTO machine_readings (data) VALUES ($1)',
+                'INSERT INTO machine_readings_log (data) VALUES ($1)',
                 [JSON.stringify(data)]
             );
             
-            console.log(`   ✅ Saved to database at ${timestamp}`);
+            // Upsert into live status table (current state of 4 machines)
+            await query(
+                `INSERT INTO machine_live_status (machine_id, data, updated_at) 
+                 VALUES ($1, $2, CURRENT_TIMESTAMP)
+                 ON CONFLICT (machine_id) 
+                 DO UPDATE SET data = $2, updated_at = CURRENT_TIMESTAMP`,
+                [data.MachineID, JSON.stringify(data)]
+            );
+            
+            console.log(`   ✅ Saved to log and updated live status at ${timestamp}`);
             
         } catch (error) {
             console.error('❌ Error processing message:', error.message);

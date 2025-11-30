@@ -2,13 +2,69 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 
-// Get all machine readings with optional limit
+// Get live status of all 4 machines
+router.get('/live', async (req, res) => {
+  try {
+    const liveStatus = await query(
+      `SELECT machine_id, data, updated_at 
+       FROM machine_live_status 
+       ORDER BY machine_id`
+    );
+    
+    res.json({
+      success: true,
+      data: liveStatus,
+      count: liveStatus.length
+    });
+  } catch (error) {
+    console.error('Error fetching live status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch live status',
+      message: error.message
+    });
+  }
+});
+
+// Get live status for specific machine
+router.get('/live/:machineId', async (req, res) => {
+  try {
+    const { machineId } = req.params;
+    const status = await query(
+      `SELECT machine_id, data, updated_at 
+       FROM machine_live_status 
+       WHERE machine_id = $1`,
+      [machineId]
+    );
+    
+    if (status.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Machine not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: status[0]
+    });
+  } catch (error) {
+    console.error('Error fetching machine status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch machine status',
+      message: error.message
+    });
+  }
+});
+
+// Get historical readings (log) with optional limit
 router.get('/readings', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
     const readings = await query(
       `SELECT id, data, created_at 
-       FROM machine_readings 
+       FROM machine_readings_log 
        ORDER BY created_at DESC 
        LIMIT $1`,
       [limit]
@@ -29,12 +85,12 @@ router.get('/readings', async (req, res) => {
   }
 });
 
-// Get reading by ID
+// Get reading by ID from log
 router.get('/readings/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const readings = await query(
-      'SELECT id, data, created_at FROM machine_readings WHERE id = $1',
+      'SELECT id, data, created_at FROM machine_readings_log WHERE id = $1',
       [id]
     );
     
@@ -59,7 +115,7 @@ router.get('/readings/:id', async (req, res) => {
   }
 });
 
-// Get readings for a specific machine ID
+// Get historical readings for a specific machine ID
 router.get('/machines/:machineId/readings', async (req, res) => {
   try {
     const { machineId } = req.params;
@@ -67,7 +123,7 @@ router.get('/machines/:machineId/readings', async (req, res) => {
     
     const readings = await query(
       `SELECT id, data, created_at 
-       FROM machine_readings 
+       FROM machine_readings_log 
        WHERE data->>'MachineID' = $1 
        ORDER BY created_at DESC 
        LIMIT $2`,
@@ -96,21 +152,19 @@ router.get('/machines/:machineId/readings', async (req, res) => {
   }
 });
 
-// Get latest reading for a specific machine
+// Get latest reading for a specific machine (from live status)
 router.get('/machines/:machineId/latest', async (req, res) => {
   try {
     const { machineId } = req.params;
     
-    const readings = await query(
-      `SELECT id, data, created_at 
-       FROM machine_readings 
-       WHERE data->>'MachineID' = $1 
-       ORDER BY created_at DESC 
-       LIMIT 1`,
+    const status = await query(
+      `SELECT machine_id, data, updated_at 
+       FROM machine_live_status 
+       WHERE machine_id = $1`,
       [machineId]
     );
     
-    if (readings.length === 0) {
+    if (status.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'No readings found for this machine'
@@ -119,7 +173,7 @@ router.get('/machines/:machineId/latest', async (req, res) => {
     
     res.json({
       success: true,
-      data: readings[0]
+      data: status[0]
     });
   } catch (error) {
     console.error('Error fetching latest reading:', error);
@@ -131,10 +185,10 @@ router.get('/machines/:machineId/latest', async (req, res) => {
   }
 });
 
-// Post new machine reading
+// Post new machine reading (writes to both log and live status)
 router.post('/readings', async (req, res) => {
   try {
-    const { timestamp, MachineID, cycle_number, current, state } = req.body;
+    const { timestamp, MachineID, cycle_number, current, state, door_opened } = req.body;
     
     // Validate required fields
     if (!MachineID || !state) {
@@ -149,12 +203,23 @@ router.post('/readings', async (req, res) => {
       MachineID,
       cycle_number: cycle_number || 0,
       current: current || 0,
-      state
+      state,
+      door_opened: door_opened !== undefined ? door_opened : false
     };
     
+    // Insert into log
     const result = await query(
-      'INSERT INTO machine_readings (data) VALUES ($1) RETURNING id, data, created_at',
+      'INSERT INTO machine_readings_log (data) VALUES ($1) RETURNING id, data, created_at',
       [JSON.stringify(data)]
+    );
+    
+    // Update live status
+    await query(
+      `INSERT INTO machine_live_status (machine_id, data, updated_at) 
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (machine_id) 
+       DO UPDATE SET data = $2, updated_at = CURRENT_TIMESTAMP`,
+      [MachineID, JSON.stringify(data)]
     );
     
     res.status(201).json({
@@ -172,28 +237,17 @@ router.post('/readings', async (req, res) => {
   }
 });
 
-// Get dashboard statistics
+// Get dashboard statistics from live status
 router.get('/dashboard', async (req, res) => {
   try {
-    // Get latest reading for each unique machine
     const stats = await query(`
-      WITH latest_readings AS (
-        SELECT DISTINCT ON (data->>'MachineID')
-          data->>'MachineID' as machine_id,
-          data->>'state' as state,
-          data->>'current' as current,
-          data->>'cycle_number' as cycle_number,
-          created_at
-        FROM machine_readings
-        ORDER BY data->>'MachineID', created_at DESC
-      )
       SELECT 
         COUNT(*) as total_machines,
-        COUNT(CASE WHEN state = 'RUNNING' THEN 1 END) as running_machines,
-        COUNT(CASE WHEN state = 'IDLE' THEN 1 END) as idle_machines,
-        COUNT(CASE WHEN state = 'ERROR' THEN 1 END) as error_machines,
-        AVG(CAST(current AS FLOAT)) as avg_current
-      FROM latest_readings
+        COUNT(CASE WHEN data->>'state' = 'RUNNING' THEN 1 END) as running_machines,
+        COUNT(CASE WHEN data->>'state' = 'IDLE' THEN 1 END) as idle_machines,
+        COUNT(CASE WHEN data->>'state' = 'OCCUPIED' THEN 1 END) as occupied_machines,
+        AVG(CAST(data->>'current' AS FLOAT)) as avg_current
+      FROM machine_live_status
     `);
     
     res.json({
@@ -210,16 +264,16 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// Get list of all unique machines
+// Get list of all 4 machines from live status
 router.get('/machines', async (req, res) => {
   try {
     const machines = await query(`
-      SELECT DISTINCT 
-        data->>'MachineID' as machine_id,
-        MAX(created_at) as last_reading
-      FROM machine_readings
-      GROUP BY data->>'MachineID'
-      ORDER BY last_reading DESC
+      SELECT 
+        machine_id,
+        data,
+        updated_at as last_reading
+      FROM machine_live_status
+      ORDER BY machine_id
     `);
     
     res.json({

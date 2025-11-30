@@ -82,8 +82,47 @@ const query = async (sql, params = []) => {
   }
 };
 
+// Create tables if they don't exist
+const createTables = async () => {
+  const dbType = process.env.DB_TYPE || 'mysql';
+  
+  try {
+    if (dbType === 'postgres') {
+      // Create log table for all historical data
+      await query(`
+        CREATE TABLE IF NOT EXISTS machine_readings_log (
+          id SERIAL PRIMARY KEY,
+          data JSONB NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      // Create index on MachineID for faster queries
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_log_machine_id 
+        ON machine_readings_log((data->>'MachineID'))
+      `);
+      
+      // Create live status table for current state of 4 machines
+      await query(`
+        CREATE TABLE IF NOT EXISTS machine_live_status (
+          machine_id VARCHAR(10) PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      console.log('✓ Database tables initialized');
+    }
+  } catch (error) {
+    console.error('Error creating tables:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   initializeDatabase,
+  createTables,
   getDb: () => db,
   query
 };
