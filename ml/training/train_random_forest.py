@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Configuration
-WINDOW_SIZE = 5  # Use last 5 samples (2.5 minutes) for prediction
+WINDOW_SIZE = 10  # Use last 10 samples (5 minutes) for prediction - increased for better context
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 N_ESTIMATORS = 100
