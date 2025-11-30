@@ -21,6 +21,6 @@ __pycache__/
 *.egg-info/
 
 # Training outputs
-*.log
-training_history.png
-confusion_matrix.png
+#*.log
+#training_history.png
+#confusion_matrix.png
