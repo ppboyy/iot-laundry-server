@@ -20,11 +20,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Configuration
-WINDOW_SIZE = 10  # Use last 10 samples (5 minutes) for prediction - increased for better context
+WINDOW_SIZE = 15  # Use last 15 samples (7.5 minutes) for prediction - more context
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
-N_ESTIMATORS = 100
-MAX_DEPTH = 15
+N_ESTIMATORS = 200  # More trees for better accuracy
+MAX_DEPTH = 20  # Deeper trees to capture complex patterns
 
 def load_prepared_data(data_path):
     """Load prepared data from STEP 1-3"""
@@ -72,7 +72,7 @@ def create_training_windows(df, window_size=WINDOW_SIZE):
     
     return X, y, feature_cols
 
-def train_random_forest(X_train, y_train):
+def train_random_forest(X_train, y_train, sample_weights=None):
     """Train Random Forest classifier"""
     print(f"\n🌳 Training Random Forest...")
     print(f"   n_estimators: {N_ESTIMATORS}")
@@ -86,10 +86,11 @@ def train_random_forest(X_train, y_train):
         min_samples_leaf=2,
         random_state=RANDOM_STATE,
         n_jobs=-1,  # Use all CPU cores
-        verbose=1
+        verbose=1,
+        class_weight='balanced'  # Handle class imbalance
     )
     
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weights)
     
     print(f"✅ Training complete!")
     
@@ -226,15 +227,18 @@ def main():
         # Create training windows
         X, y, feature_cols = create_training_windows(df, WINDOW_SIZE)
         
-        # Split train/test
-        print(f"\n✂️  Splitting data (train={1-TEST_SIZE:.0%}, test={TEST_SIZE:.0%})...")
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
-        )
-        print(f"   Train: {len(X_train)} samples")
-        print(f"   Test:  {len(X_test)} samples")
-        
-        # Train model
+    # Split train/test
+    print(f"\n✂️  Splitting data (train={1-TEST_SIZE:.0%}, test={TEST_SIZE:.0%})...")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+    )
+    print(f"   Train: {len(X_train)} samples")
+    print(f"   Test:  {len(X_test)} samples")
+    
+    # Calculate class weights to handle imbalance
+    from sklearn.utils.class_weight import compute_sample_weight
+    sample_weights = compute_sample_weight('balanced', y_train)        # Train model
+        model = train_random_forest(X_train, y_train, sample_weights)imbalanced dataset")        # Train model
         model = train_random_forest(X_train, y_train)
         
         # Evaluate
