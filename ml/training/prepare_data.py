@@ -113,46 +113,50 @@ def label_phases_rule_based(df):
     print(f"\n🏷️  Generating rule-based phase labels...")
     
     power = df['power_smooth']
-    power_max_30s = df['power_max_30s']
-    power_std_30s = df['power_std_30s']
+    power_avg_60s = df['power_avg_60s']
     
     # Initialize labels
     labels = []
     
+    # First pass: Basic labeling by power level
     for i in range(len(df)):
         p = power.iloc[i]
-        p_max = power_max_30s.iloc[i]
-        p_std = power_std_30s.iloc[i]
+        p_avg = power_avg_60s.iloc[i]
         
         # Rule-based classification based on actual power graph pattern
         if p < 15:
             # Idle/Standby
             label = 'IDLE'
-        elif p > 280:
+        elif p > 280 or p_avg > 250:
             # Sustained high power = SPIN
             label = 'SPIN'
-        elif p > 230:
-            # High power (230-280W) = RINSE
-            # These are the pump/drain phases during rinse cycles
+        elif p > 220 or p_avg > 180:
+            # Power spike above 220W OR average above 180W = RINSE
+            # From your graph: washing stays mostly under 200W, rinse spikes much higher
             label = 'RINSE'
-        elif p_max > 230:
-            # Recent spike above 230W = RINSE
-            label = 'RINSE'
-        elif p >= 200 and p_std > 10:
-            # High power with high volatility = RINSE
-            # Standard deviation > 10 indicates pumping fluctuations
-            label = 'RINSE'
-        elif p >= 50 and p < 200:
-            # 50-200W = WASHING
-            # This is the steady baseline power in your graph
-            label = 'WASHING'
-        elif p >= 15 and p < 50:
-            # Low power = transition between phases or gentle washing
+        elif p >= 15 and p < 220:
+            # 15-220W = WASHING (the oscillating baseline)
             label = 'WASHING'
         else:
             label = 'WASHING'  # Default
         
         labels.append(label)
+    
+    df['phase'] = labels
+    
+    # Second pass: Expand RINSE windows
+    # If we detect a rinse spike, mark surrounding samples as RINSE too
+    labels = df['phase'].values.copy()
+    window = 20  # Expand rinse detection by 20 samples (~3-4 minutes)
+    
+    for i in range(len(labels)):
+        if labels[i] == 'RINSE':
+            # Mark previous and next samples as RINSE
+            start = max(0, i - window)
+            end = min(len(labels), i + window)
+            for j in range(start, end):
+                if labels[j] == 'WASHING':
+                    labels[j] = 'RINSE'
     
     df['phase'] = labels
     
