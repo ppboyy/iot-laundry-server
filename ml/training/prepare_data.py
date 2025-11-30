@@ -115,7 +115,12 @@ def label_phases_rule_based(df):
     power = df['power_smooth']
     power_avg_60s = df['power_avg_60s']
     
-    # Initialize labels
+    # Initialize labels based on actual data distribution:
+    # - Median: 89W (typical washing)
+    # - 75th percentile: 146W (upper washing range)
+    # - 95th percentile: 278W (rinse spikes)
+    # - 99th percentile: 355W (peak rinse spikes)
+    
     labels = []
     
     # First pass: Basic labeling by power level
@@ -123,35 +128,39 @@ def label_phases_rule_based(df):
         p = power.iloc[i]
         p_avg = power_avg_60s.iloc[i]
         
-        # Rule-based classification based on actual power graph pattern
         if p < 15:
             # Idle/Standby
             label = 'IDLE'
-        elif p > 280 or p_avg > 250:
-            # Sustained high power = SPIN
-            label = 'SPIN'
-        elif p > 220 or p_avg > 180:
-            # Power spike above 220W OR average above 180W = RINSE
-            # From your graph: washing stays mostly under 200W, rinse spikes much higher
+        elif p > 270:
+            # Very high power = SPIN or peak RINSE
+            # Use average to distinguish
+            if p_avg > 220:
+                label = 'SPIN'  # Sustained high = spin
+            else:
+                label = 'RINSE'  # Spike = rinse
+        elif p > 200:
+            # Above 200W (top 10% of data) = RINSE
+            # These are the spike regions in your graph
             label = 'RINSE'
-        elif p >= 15 and p < 220:
-            # 15-220W = WASHING (the oscillating baseline)
+        elif p >= 15 and p <= 200:
+            # 15-200W (bulk of data) = WASHING
+            # This is the oscillating baseline
             label = 'WASHING'
         else:
-            label = 'WASHING'  # Default
+            label = 'WASHING'
         
         labels.append(label)
     
     df['phase'] = labels
     
-    # Second pass: Expand RINSE windows
-    # If we detect a rinse spike, mark surrounding samples as RINSE too
+    # Second pass: Expand RINSE windows to capture full rinse cycles
+    # Each rinse cycle is several minutes long, not just the peak
     labels = df['phase'].values.copy()
-    window = 20  # Expand rinse detection by 20 samples (~3-4 minutes)
+    window = 30  # Expand by 30 samples (~5 minutes) to capture full rinse cycle
     
     for i in range(len(labels)):
         if labels[i] == 'RINSE':
-            # Mark previous and next samples as RINSE
+            # Mark surrounding samples as RINSE
             start = max(0, i - window)
             end = min(len(labels), i + window)
             for j in range(start, end):
