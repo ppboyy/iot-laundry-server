@@ -1,194 +1,381 @@
 # IoT Laundry Server
 
-Backend server for IoT laundry system that connects AWS RDS database to your Vercel frontend.
+Backend server for IoT laundry monitoring system. Receives real-time data from AWS IoT Core and provides REST API for frontend dashboard.
+
+## System Architecture
+
+```
+ESP32 (Hall Sensor) ──┐
+                      ├──> Local MQTT Broker (Raspberry Pi) ──> AWS IoT Core ──> EC2 Backend ──> PostgreSQL RDS
+Shelly Plug (Power) ──┘                                                              │
+                                                                                      ├──> REST API ──> Vercel Frontend
+                                                                                      │
+                                                            Raspberry Pi Monitor Script publishes aggregated data every 30s
+```
 
 ## Features
 
-- Express.js REST API server
-- Support for both MySQL and PostgreSQL RDS instances
-- CORS configured for Vercel frontend
-- Connection pooling for optimal performance
-- Error handling and logging
-- Health check endpoint
+- **Dual-table Architecture**: Separate tables for historical logs and live machine status
+- **AWS IoT Core Integration**: Real-time MQTT data ingestion from Raspberry Pi
+- **REST API**: Express.js endpoints for frontend dashboard
+- **PostgreSQL RDS**: Optimized for AWS with JSONB support
+- **Live Status Table**: Always contains current state of 4 machines (WM-01 to WM-04)
+- **Historical Log Table**: Append-only log of all data submissions
+- **CORS Configured**: Ready for Vercel frontend integration
+
+## Components
+
+1. **server.js**: Express REST API server (port 3000)
+2. **iot-subscriber.js**: AWS IoT Core MQTT subscriber
+3. **routes/api.js**: API endpoint definitions
+4. **config/database.js**: PostgreSQL connection and table initialization
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
-- AWS RDS database (MySQL or PostgreSQL)
-- Database credentials and endpoint
+- AWS RDS PostgreSQL database
+- AWS IoT Core certificates (for iot-subscriber.js)
+- EC2 instance (recommended) or local server
 
 ## Installation
 
-1. **Install dependencies:**
+1. **Clone repository:**
+   ```bash
+   git clone https://github.com/yourusername/iot-laundry-server.git
+   cd iot-laundry-server
+   ```
+
+2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-2. **Configure environment variables:**
+3. **Configure environment variables:**
    
    Copy `.env.example` to `.env`:
    ```bash
-   copy .env.example .env
+   cp .env.example .env
    ```
    
-   Edit `.env` and add your AWS RDS credentials:
+   Edit `.env` with your credentials:
    ```env
+   # Server Configuration
    PORT=3000
-   NODE_ENV=development
+   NODE_ENV=production
    
-   # Choose your database type
-   DB_TYPE=mysql  # or "postgres"
-   DB_HOST=your-rds-endpoint.region.rds.amazonaws.com
-   DB_PORT=3306   # 3306 for MySQL, 5432 for PostgreSQL
-   DB_USER=your_db_username
-   DB_PASSWORD=your_db_password
-   DB_NAME=your_database_name
+   # PostgreSQL Database
+   DB_TYPE=postgres
+   DB_HOST=iot-laundry-database.chi20c6aago7.ap-southeast-1.rds.amazonaws.com
+   DB_PORT=5432
+   DB_USER=postgres
+   DB_PASSWORD=your_password
+   DB_NAME=laundry_iot
    
-   # Add your Vercel frontend URL
-   ALLOWED_ORIGINS=https://your-app.vercel.app
+   # AWS IoT Core (for iot-subscriber.js)
+   IOT_ENDPOINT=a5916n61elm51-ats.iot.ap-southeast-1.amazonaws.com
+   IOT_CLIENT_ID=backend-subscriber
+   IOT_CA_PATH=./certs/AmazonRootCA1.pem
+   IOT_CERT_PATH=./certs/device.pem.crt
+   IOT_KEY_PATH=./certs/private.pem.key
+   
+   # CORS - Add your Vercel frontend URL
+   ALLOWED_ORIGINS=https://www.iotwasher.com,http://localhost:3000
+   ```
+
+4. **Add AWS IoT Core certificates:**
+   ```bash
+   mkdir certs
+   # Copy your AWS IoT certificates to certs/ folder
+   # - AmazonRootCA1.pem
+   # - device.pem.crt
+   # - private.pem.key
    ```
 
 ## Database Setup
 
-The example routes assume the following tables exist. Modify according to your schema:
+Tables are **automatically created** when `iot-subscriber.js` starts for the first time.
 
+### Table Structure
+
+**machine_live_status** - Current state of 4 machines
 ```sql
--- Example MySQL schema
-CREATE TABLE machines (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL,
-    status VARCHAR(50) DEFAULT 'idle',
-    location VARCHAR(255)
-);
-
-CREATE TABLE machine_status (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    machine_id INT NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    temperature DECIMAL(5,2),
-    cycle_time INT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (machine_id) REFERENCES machines(id)
+CREATE TABLE machine_live_status (
+  machine_id VARCHAR(10) PRIMARY KEY,  -- WM-01, WM-02, WM-03, WM-04
+  data JSONB NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+**machine_readings_log** - Historical data (append-only)
+```sql
+CREATE TABLE machine_readings_log (
+  id SERIAL PRIMARY KEY,
+  data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Data Format
+```json
+{
+  "timestamp": "2025-11-30T12:00:00.000Z",
+  "MachineID": "WM-01",
+  "cycle_number": 5,
+  "current": 250.5,
+  "state": "RUNNING",
+  "door_opened": false
+}
+```
+
+**States**: `IDLE`, `RUNNING`, `OCCUPIED`
 
 ## Running the Server
 
-**Development mode (with auto-restart):**
+### Option 1: Direct Node.js (for testing)
 ```bash
-npm run dev
+# Terminal 1 - API Server
+node server.js
+
+# Terminal 2 - IoT Subscriber
+node iot-subscriber.js
 ```
 
-**Production mode:**
+### Option 2: With PM2 (recommended for production)
 ```bash
-npm start
+# Start both services
+pm2 start server.js --name washer-backend
+pm2 start iot-subscriber.js --name iot-subscriber
+
+# View logs
+pm2 logs
+
+# Save process list (auto-restart on reboot)
+pm2 save
+pm2 startup
+
+# Manage processes
+pm2 list
+pm2 restart washer-backend
+pm2 stop iot-subscriber
 ```
 
-The server will start on `http://localhost:3000` (or your configured PORT).
+### Option 3: Background with nohup
+```bash
+nohup node server.js > server.log 2>&1 &
+nohup node iot-subscriber.js > subscriber.log 2>&1 &
+```
 
 ## API Endpoints
 
-### Health Check
-- `GET /health` - Check if server is running
+### Live Machine Status (Dashboard)
+- `GET /api/live` - Get current status of all 4 machines
+- `GET /api/live/:machineId` - Get current status of specific machine (e.g., `/api/live/WM-01`)
 
-### Machines
-- `GET /api/machines` - Get all machines
-- `GET /api/machines/:id` - Get specific machine by ID
-- `GET /api/machines/:id/status` - Get latest status for a machine
+### Historical Data (Analytics)
+- `GET /api/readings?limit=100` - Get recent log entries
+- `GET /api/readings/:id` - Get specific log entry by ID
+- `GET /api/machines/:machineId/readings?limit=100` - Get history for specific machine
 
-### Status
-- `GET /api/status` - Get recent status logs (last 100)
-- `POST /api/status` - Record new machine status
+### Dashboard & Summary
+- `GET /api/dashboard` - Statistics (total machines, running, idle, occupied)
+- `GET /api/machines` - List all machines with current data
 
-### Dashboard
-- `GET /api/dashboard` - Get summary statistics
+### Diagnostics
+- `GET /health` - Server health check
+- `GET /api/diagnostics` - Database tables and record counts
 
-### Example Response
+### Example Responses
+
+**GET /api/live/WM-01**
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": 1,
-      "name": "Washer A",
-      "status": "running",
-      "location": "Floor 1"
-    }
-  ],
-  "count": 1
+  "data": {
+    "machine_id": "WM-01",
+    "data": {
+      "timestamp": "2025-11-30T12:00:00.000Z",
+      "MachineID": "WM-01",
+      "cycle_number": 5,
+      "current": 250.5,
+      "state": "RUNNING",
+      "door_opened": false
+    },
+    "updated_at": "2025-11-30T12:00:15.000Z"
+  }
+}
+```
+
+**GET /api/dashboard**
+```json
+{
+  "success": true,
+  "data": {
+    "total_machines": 4,
+    "running_machines": 2,
+    "idle_machines": 1,
+    "occupied_machines": 1,
+    "avg_current": 125.3
+  }
 }
 ```
 
 ## Connecting to Vercel Frontend
 
-In your Vercel frontend, fetch data using:
+In your Vercel frontend (`https://www.iotwasher.com`), fetch data using:
 
 ```javascript
-// Example React/Next.js code
-const fetchMachines = async () => {
+// React/Next.js example - Fetch live machine status
+const API_BASE = 'http://47.129.194.3:3000/api';
+
+const fetchLiveMachines = async () => {
   try {
-    const response = await fetch('http://your-server-url:3000/api/machines');
+    const response = await fetch(`${API_BASE}/live`);
     const result = await response.json();
     
     if (result.success) {
+      // result.data contains array of 4 machines
       console.log(result.data);
     }
   } catch (error) {
     console.error('Error fetching machines:', error);
   }
 };
+
+// Fetch specific machine
+const fetchMachine = async (machineId) => {
+  const response = await fetch(`${API_BASE}/live/${machineId}`);
+  const result = await response.json();
+  return result.data;
+};
+
+// Fetch dashboard stats
+const fetchDashboard = async () => {
+  const response = await fetch(`${API_BASE}/dashboard`);
+  return await response.json();
+};
 ```
 
-## Deployment Options
+## Deployment (AWS EC2)
 
-### Option 1: Deploy to AWS EC2
-1. Launch an EC2 instance
-2. Install Node.js
-3. Clone your repository
-4. Set up environment variables
-5. Run with PM2 for process management:
-   ```bash
-   npm install -g pm2
-   pm2 start server.js --name iot-laundry-server
-   ```
+Current deployment: `http://47.129.194.3:3000`
 
-### Option 2: Deploy to Heroku
-1. Create Heroku app
-2. Set environment variables in Heroku dashboard
-3. Deploy via Git:
-   ```bash
-   git push heroku main
-   ```
+### Initial Setup
+```bash
+# SSH into EC2
+ssh -i your-key.pem ubuntu@47.129.194.3
 
-### Option 3: Deploy to AWS Elastic Beanstalk
-1. Install EB CLI
-2. Initialize: `eb init`
-3. Create environment: `eb create`
-4. Deploy: `eb deploy`
+# Install Node.js
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install PM2 globally
+sudo npm install -g pm2
+
+# Clone repository
+git clone https://github.com/yourusername/iot-laundry-server.git
+cd iot-laundry-server
+
+# Install dependencies
+npm install
+
+# Configure .env file
+nano .env
+# (Add your database and AWS IoT credentials)
+
+# Create certs directory and add certificates
+mkdir certs
+# Upload your AWS IoT certificates to certs/
+
+# Start services with PM2
+pm2 start server.js --name washer-backend
+pm2 start iot-subscriber.js --name iot-subscriber
+
+# Save PM2 configuration
+pm2 save
+pm2 startup
+
+# Check status
+pm2 list
+pm2 logs
+```
+
+### Updating Code
+```bash
+cd ~/iot-laundry-server
+git pull origin main
+npm install
+pm2 restart washer-backend
+pm2 restart iot-subscriber
+pm2 logs
+```
+
+## Data Flow
+
+1. **ESP32** publishes hall sensor data → Local MQTT broker on Raspberry Pi
+2. **Shelly Plug** publishes power data → Local MQTT broker on Raspberry Pi
+3. **Raspberry Pi** (`washing_machine_monitor_v2.py`) aggregates data every 30 seconds → AWS IoT Core
+4. **iot-subscriber.js** receives from AWS IoT Core → Writes to PostgreSQL:
+   - Inserts into `machine_readings_log` (historical)
+   - Upserts into `machine_live_status` (current state)
+5. **Vercel Frontend** fetches from REST API → Displays dashboard
 
 ## Security Considerations
 
+- ✅ Certificates stored in `certs/` directory (excluded from git via `.gitignore`)
 - ✅ Never commit `.env` file to version control
-- ✅ Use environment variables for sensitive data
-- ✅ Configure CORS to only allow your Vercel domain
-- ✅ Use AWS security groups to restrict RDS access
-- ✅ Consider using AWS Secrets Manager for credentials
-- ✅ Enable SSL/TLS for database connections in production
-
-## Customization
-
-Edit `routes/api.js` to add custom endpoints based on your database schema and business logic.
+- ✅ CORS configured to allow only Vercel domain
+- ✅ AWS RDS security group restricts database access to EC2 only
+- ✅ PostgreSQL uses SSL/TLS connection (`rejectUnauthorized: false` for AWS RDS)
+- ✅ AWS IoT Core uses certificate-based authentication
 
 ## Troubleshooting
 
-**Connection Failed:**
-- Verify RDS security group allows inbound traffic from your server IP
+**API Endpoints Not Working:**
+- Check if server is running: `pm2 list`
+- View logs: `pm2 logs washer-backend`
+- Restart server: `pm2 restart washer-backend`
+- Verify port 3000 is not in use: `sudo lsof -i :3000`
+
+**No Data in Database:**
+- Check IoT subscriber: `pm2 logs iot-subscriber`
+- Verify Raspberry Pi is publishing to AWS IoT Core
+- Test database connection: `GET /api/diagnostics`
+
+**Database Connection Failed:**
+- Verify RDS security group allows inbound from EC2
 - Check database credentials in `.env`
-- Ensure RDS instance is publicly accessible (if needed)
+- Test with: `psql -h your-endpoint -U postgres -d laundry_iot`
 
 **CORS Errors:**
 - Add your Vercel domain to `ALLOWED_ORIGINS` in `.env`
-- Ensure frontend is making requests to the correct server URL
+- Restart server after changing environment variables
+
+## Files Structure
+
+```
+iot-laundry-server/
+├── server.js                 # Main Express API server
+├── iot-subscriber.js         # AWS IoT Core MQTT subscriber
+├── package.json              # Dependencies
+├── .env                      # Environment variables (not in git)
+├── .env.example              # Environment template
+├── .gitignore                # Excludes certs/, .env
+├── README.md                 # This file
+├── config/
+│   └── database.js           # PostgreSQL connection & table creation
+├── routes/
+│   └── api.js                # REST API endpoints
+├── certs/                    # AWS IoT certificates (not in git)
+│   ├── AmazonRootCA1.pem
+│   ├── device.pem.crt
+│   └── private.pem.key
+└── IOT_SUBSCRIBER_SETUP.md   # Detailed setup guide for EC2
+```
+
+## Related Repositories
+
+- **iot-RPI-MQTT-broker**: Raspberry Pi monitoring scripts
+- **iot-laundry-frontend**: Vercel frontend dashboard (https://www.iotwasher.com)
 
 ## License
 
