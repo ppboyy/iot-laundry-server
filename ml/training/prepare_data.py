@@ -154,23 +154,23 @@ def label_phases_rule_based(df):
     
     df['phase'] = labels
     
-    # Second pass: Minimal expansion for RINSE - only immediate neighbors
-    # Don't over-expand, just smooth out single-sample noise
+    # Second pass: Expand RINSE windows to capture full rinse cycles
+    # Each rinse cycle is several minutes long, not just the peak
     labels = df['phase'].values.copy()
-    rinse_window = 3  # Only expand by 3 samples (~30 seconds) - very conservative
+    rinse_window = 30  # Expand by 30 samples (~5 minutes) to capture full rinse cycle
     
     for i in range(len(labels)):
         if labels[i] == 'RINSE':
-            # Mark only immediate neighbors as RINSE if they're high power
+            # Mark surrounding samples as RINSE
             start = max(0, i - rinse_window)
             end = min(len(labels), i + rinse_window)
             for j in range(start, end):
-                if labels[j] == 'WASHING' and power.iloc[j] > 180:
-                    # Only expand if power is still high (>180W)
+                if labels[j] == 'WASHING':
                     labels[j] = 'RINSE'
     
-    # Third pass: Expand SPIN windows
-    spin_window = 5  # Small window for spin
+    # Third pass: Expand SPIN windows and clean up SPIN/RINSE boundaries
+    # SPIN typically ramps up gradually and sustains
+    spin_window = 10  # Smaller window for spin (±2 minutes)
     
     for i in range(len(labels)):
         if labels[i] == 'SPIN':
@@ -178,8 +178,8 @@ def label_phases_rule_based(df):
             start = max(0, i - spin_window)
             end = min(len(labels), i + spin_window)
             for j in range(start, end):
-                if labels[j] == 'RINSE' and power.iloc[j] > 260:
-                    # Only convert to SPIN if power is very high
+                if labels[j] == 'RINSE' and power.iloc[j] > 250:
+                    # High power near SPIN = likely part of spin cycle
                     labels[j] = 'SPIN'
     
     df['phase'] = labels
