@@ -24,10 +24,10 @@ from tensorflow.keras import layers, models
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 
 # Configuration
-WINDOW_SIZE = 10  # Use last 10 samples (5 minutes) for CNN
+WINDOW_SIZE = 15  # Use last 15 samples (7.5 minutes) for more context
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
-EPOCHS = 50
+EPOCHS = 100
 BATCH_SIZE = 32
 
 def load_prepared_data(data_path):
@@ -119,6 +119,10 @@ def build_cnn_model(input_shape, n_classes):
         layers.Dense(n_classes, activation='softmax')
     ])
     
+    # Calculate class weights to handle imbalance
+    from sklearn.utils.class_utils import compute_class_weight
+    import numpy as np
+    
     model.compile(
         optimizer='adam',
         loss='sparse_categorical_crossentropy',
@@ -126,20 +130,31 @@ def build_cnn_model(input_shape, n_classes):
     )
     
     print(f"\n📋 Model Architecture:")
-    model.summary()
-    
-    return model
-
 def train_cnn(model, X_train, y_train, X_test, y_test, model_dir):
     """Train CNN model with callbacks"""
     print(f"\n🎓 Training CNN...")
+    
+    # Calculate class weights to handle imbalance
+    from sklearn.utils.class_weight import compute_class_weight
+    import numpy as np
+    
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=np.unique(y_train),
+        y=y_train
+    )
+    class_weight_dict = {i: weight for i, weight in enumerate(class_weights)}
+    
+    print(f"\n⚖️  Class weights (to handle imbalance):")
+    for cls, weight in class_weight_dict.items():
+        print(f"   Class {cls}: {weight:.2f}")
     
     # Callbacks
     checkpoint_path = os.path.join(model_dir, 'cnn_best_model.h5')
     callbacks = [
         EarlyStopping(
             monitor='val_loss',
-            patience=10,
+            patience=15,
             restore_best_weights=True,
             verbose=1
         ),
@@ -152,17 +167,22 @@ def train_cnn(model, X_train, y_train, X_test, y_test, model_dir):
         ReduceLROnPlateau(
             monitor='val_loss',
             factor=0.5,
-            patience=5,
+            patience=7,
             min_lr=1e-6,
             verbose=1
         )
     ]
     
-    # Train
+    # Train with class weights
     history = model.fit(
         X_train, y_train,
         validation_data=(X_test, y_test),
         epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        callbacks=callbacks,
+        class_weight=class_weight_dict,
+        verbose=1
+    )   epochs=EPOCHS,
         batch_size=BATCH_SIZE,
         callbacks=callbacks,
         verbose=1
