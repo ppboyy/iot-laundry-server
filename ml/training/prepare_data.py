@@ -15,7 +15,7 @@ import os
 import json
 
 # Configuration
-WINDOW_LENGTH = 11  # Savitzky-Golay window (~5.5 minutes at 30s intervals)
+WINDOW_LENGTH = 21  # Savitzky-Golay window (~5.5 minutes at 30s intervals)
 POLYORDER = 3       # Cubic polynomial
 FEATURE_WINDOW = 4  # Number of samples for rolling features (2 minutes)
 
