@@ -2,6 +2,53 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 
+// Database diagnostics endpoint
+router.get('/diagnostics', async (req, res) => {
+  try {
+    // Check if tables exist
+    const tables = await query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('machine_live_status', 'machine_readings_log')
+      ORDER BY table_name
+    `);
+    
+    let liveCount = 0;
+    let logCount = 0;
+    
+    // Try to count records
+    try {
+      const liveResult = await query('SELECT COUNT(*) as count FROM machine_live_status');
+      liveCount = parseInt(liveResult[0].count);
+    } catch (e) {
+      // Table doesn't exist
+    }
+    
+    try {
+      const logResult = await query('SELECT COUNT(*) as count FROM machine_readings_log');
+      logCount = parseInt(logResult[0].count);
+    } catch (e) {
+      // Table doesn't exist
+    }
+    
+    res.json({
+      success: true,
+      tables: tables.map(t => t.table_name),
+      data: {
+        machine_live_status_count: liveCount,
+        machine_readings_log_count: logCount,
+        tables_exist: tables.length === 2
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Get live status of all 4 machines
 router.get('/live', async (req, res) => {
   try {
