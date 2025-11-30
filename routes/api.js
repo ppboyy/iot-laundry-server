@@ -199,39 +199,6 @@ router.get('/machines/:machineId/readings', async (req, res) => {
   }
 });
 
-// Get latest reading for a specific machine (from live status)
-router.get('/machines/:machineId/latest', async (req, res) => {
-  try {
-    const { machineId } = req.params;
-    
-    const status = await query(
-      `SELECT machine_id, data, updated_at 
-       FROM machine_live_status 
-       WHERE machine_id = $1`,
-      [machineId]
-    );
-    
-    if (status.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'No readings found for this machine'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: status[0]
-    });
-  } catch (error) {
-    console.error('Error fetching latest reading:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch latest reading',
-      message: error.message
-    });
-  }
-});
-
 // Post new machine reading (writes to both log and live status)
 router.post('/readings', async (req, res) => {
   try {
