@@ -126,6 +126,10 @@ def build_cnn_model(input_shape, n_classes):
     )
     
     print(f"\n📋 Model Architecture:")
+    model.summary()
+    
+    return model
+
 def train_cnn(model, X_train, y_train, X_test, y_test, model_dir):
     """Train CNN model with callbacks"""
     print(f"\n🎓 Training CNN...")
