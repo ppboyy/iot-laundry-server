@@ -98,6 +98,34 @@ def extract_features(df):
         lambda x: (x.max() - x.min()) / (x.mean() + 1e-6)
     ).fillna(0)
     
+    # NEW FEATURES FOR BETTER WASHING DETECTION
+    
+    # 1. Peak count (WASHING has regular peaks, RINSE has fewer/sharper peaks)
+    df['peak_count'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
+        lambda x: sum((x[1:-1] > x[:-2]) & (x[1:-1] > x[2:]))
+    ).fillna(0)
+    
+    # 2. Regularity score (WASHING is rhythmic, RINSE is irregular)
+    # Measure consistency of oscillation period
+    df['regularity_score'] = power.rolling(window=FEATURE_WINDOW*2, min_periods=2).apply(
+        lambda x: 1.0 / (1.0 + np.std(np.diff(x)))
+    ).fillna(0)
+    
+    # 3. Sustained high power ratio (RINSE spikes briefly, WASHING sustains)
+    df['high_power_ratio'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
+        lambda x: sum(x > 200) / len(x)
+    ).fillna(0)
+    
+    # 4. Power stability (WASHING oscillates steadily, RINSE has sudden jumps)
+    df['power_stability'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
+        lambda x: 1.0 - (np.std(np.diff(x)) / (np.mean(x) + 1e-6))
+    ).fillna(0)
+    
+    # 5. Mean absolute deviation (captures consistent oscillation pattern)
+    df['power_mad'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
+        lambda x: np.mean(np.abs(x - np.mean(x)))
+    ).fillna(0)
+    
     print(f"✅ Extracted features:")
     print(f"   - Rolling averages (30s, 60s)")
     print(f"   - Standard deviation (volatility)")
@@ -105,6 +133,11 @@ def extract_features(df):
     print(f"   - Power derivative (rate of change)")
     print(f"   - Time in range (stability)")
     print(f"   - Oscillation measure")
+    print(f"   - Peak count (NEW - detects rhythmic pattern)")
+    print(f"   - Regularity score (NEW - WASHING is predictable)")
+    print(f"   - High power ratio (NEW - distinguishes RINSE spikes)")
+    print(f"   - Power stability (NEW - WASHING vs RINSE jumps)")
+    print(f"   - Mean absolute deviation (NEW - oscillation strength)")
     
     return df
 
@@ -123,29 +156,34 @@ def label_phases_rule_based(df):
     
     labels = []
     
-    # First pass: Basic labeling by power level
+    # First pass: Basic labeling by power level WITH PATTERN DETECTION
     for i in range(len(df)):
         p = power.iloc[i]
         p_avg = power_avg_60s.iloc[i]
+        oscillation = df['power_oscillation'].iloc[i]
+        peak_count = df['peak_count'].iloc[i] if 'peak_count' in df.columns else 0
         
         if p < 15:
             # Idle/Standby
             label = 'IDLE'
         elif p > 300 or (p > 270 and p_avg > 250):
             # Very high sustained power = SPIN
-            # SPIN: power > 300W OR (power > 270W AND average > 250W)
-            # This distinguishes sustained spin from rinse spikes
             label = 'SPIN'
         elif p > 270:
             # 270-300W without sustained average = likely RINSE spike
             label = 'RINSE'
         elif p > 200:
-            # 200-270W = RINSE
-            # These are the spike regions in your graph
-            label = 'RINSE'
+            # 200-270W = RINSE (but check for WASHING patterns)
+            # WASHING can briefly spike to 200W, but has regular oscillation
+            if p < 220 and oscillation > 0.3 and peak_count >= 2:
+                # Regular pattern near 200W = likely WASHING phase
+                label = 'WASHING'
+            else:
+                # Higher power or irregular = RINSE
+                label = 'RINSE'
         elif p >= 15 and p <= 200:
             # 15-200W (bulk of data) = WASHING
-            # This is the oscillating baseline
+            # This is your predictable oscillating baseline
             label = 'WASHING'
         else:
             label = 'WASHING'
