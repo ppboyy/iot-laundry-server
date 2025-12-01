@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Configuration
-WINDOW_SIZE = 12  # Use last 12 samples (6 minutes) for prediction
+WINDOW_SIZE = 18  # Increased from 12 to 18 (9 minutes) for better WASHING pattern recognition
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 N_ESTIMATORS = 300  # More trees for better accuracy
@@ -81,6 +81,17 @@ def train_random_forest(X_train, y_train, sample_weights=None):
     print(f"   max_depth: {MAX_DEPTH}")
     print(f"   Training samples: {len(X_train)}")
     
+    # Calculate class weights to give more importance to WASHING and RINSE
+    # (the classes that are being confused)
+    class_weights = {
+        'IDLE': 1.0,
+        'WASHING': 1.5,  # Increase weight for WASHING
+        'RINSE': 1.3,    # Increase weight for RINSE
+        'SPIN': 1.0
+    }
+    
+    print(f"   Class weights: {class_weights}")
+    
     model = RandomForestClassifier(
         n_estimators=N_ESTIMATORS,
         max_depth=MAX_DEPTH,
@@ -89,6 +100,7 @@ def train_random_forest(X_train, y_train, sample_weights=None):
         max_features='sqrt',  # Use sqrt of features for each split
         bootstrap=True,
         oob_score=True,  # Out-of-bag score estimation
+        class_weight=class_weights,  # Add class weights
         random_state=RANDOM_STATE,
         n_jobs=-1,  # Use all CPU cores
         verbose=1
