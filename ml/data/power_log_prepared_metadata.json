@@ -1,6 +1,6 @@
 {
-  "samples": 2457,
-  "duration_minutes": 46.17872415,
+  "samples": 2554,
+  "duration_minutes": 48.72528318333333,
   "features": [
     "power",
     "power_smooth",
@@ -19,12 +19,12 @@
     "RINSE": 1487,
     "WASHING": 781,
     "SPIN": 152,
-    "IDLE": 37
+    "IDLE": 134
   },
   "smoothing": {
     "method": "savitzky_golay",
     "window_length": 21,
     "polyorder": 3
   },
-  "created_at": "2025-11-30T19:54:35.651198"
+  "created_at": "2025-12-01T08:40:18.945114"
 }
