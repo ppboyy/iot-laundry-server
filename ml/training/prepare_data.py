@@ -101,29 +101,57 @@ def extract_features(df):
     # NEW FEATURES FOR BETTER WASHING DETECTION
     
     # 1. Peak count (WASHING has regular peaks, RINSE has fewer/sharper peaks)
+    def count_peaks(x):
+        x_arr = np.array(x)
+        if len(x_arr) < 3:
+            return 0
+        return np.sum((x_arr[1:-1] > x_arr[:-2]) & (x_arr[1:-1] > x_arr[2:]))
+    
     df['peak_count'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
-        lambda x: sum((x[1:-1] > x[:-2]) & (x[1:-1] > x[2:]))
+        count_peaks, raw=True
     ).fillna(0)
     
     # 2. Regularity score (WASHING is rhythmic, RINSE is irregular)
     # Measure consistency of oscillation period
+    def calc_regularity(x):
+        x_arr = np.array(x)
+        if len(x_arr) < 2:
+            return 0
+        return 1.0 / (1.0 + np.std(np.diff(x_arr)))
+    
     df['regularity_score'] = power.rolling(window=FEATURE_WINDOW*2, min_periods=2).apply(
-        lambda x: 1.0 / (1.0 + np.std(np.diff(x)))
+        calc_regularity, raw=True
     ).fillna(0)
     
     # 3. Sustained high power ratio (RINSE spikes briefly, WASHING sustains)
+    def high_power_ratio(x):
+        x_arr = np.array(x)
+        return np.sum(x_arr > 200) / len(x_arr) if len(x_arr) > 0 else 0
+    
     df['high_power_ratio'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
-        lambda x: sum(x > 200) / len(x)
+        high_power_ratio, raw=True
     ).fillna(0)
     
     # 4. Power stability (WASHING oscillates steadily, RINSE has sudden jumps)
+    def calc_stability(x):
+        x_arr = np.array(x)
+        if len(x_arr) < 2:
+            return 0
+        return 1.0 - (np.std(np.diff(x_arr)) / (np.mean(x_arr) + 1e-6))
+    
     df['power_stability'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
-        lambda x: 1.0 - (np.std(np.diff(x)) / (np.mean(x) + 1e-6))
+        calc_stability, raw=True
     ).fillna(0)
     
     # 5. Mean absolute deviation (captures consistent oscillation pattern)
+    def calc_mad(x):
+        x_arr = np.array(x)
+        if len(x_arr) == 0:
+            return 0
+        return np.mean(np.abs(x_arr - np.mean(x_arr)))
+    
     df['power_mad'] = power.rolling(window=FEATURE_WINDOW, min_periods=1).apply(
-        lambda x: np.mean(np.abs(x - np.mean(x)))
+        calc_mad, raw=True
     ).fillna(0)
     
     print(f"✅ Extracted features:")
