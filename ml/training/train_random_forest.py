@@ -227,7 +227,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     
-    data_path = os.path.join(project_root, 'data', 'power_log_prepared.csv')
+    data_path = os.path.join(project_root, 'data', 'power_log_with_extra_idle.csv')
     model_dir = os.path.join(project_root, 'models')
     
     # Check if prepared data exists
