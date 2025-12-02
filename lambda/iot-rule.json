@@ -1,0 +1,14 @@
+{
+  "ruleName": "PowerAnomalyDetector",
+  "description": "Detect high power consumption and trigger Lambda alert",
+  "sql": "SELECT * FROM 'washer/+/data' WHERE current > 750",
+  "actions": [
+    {
+      "lambda": {
+        "functionArn": "arn:aws:lambda:ap-southeast-1:YOUR_ACCOUNT_ID:function:PowerAnomalyDetector"
+      }
+    }
+  ],
+  "ruleDisabled": false,
+  "awsIotSqlVersion": "2016-03-23"
+}

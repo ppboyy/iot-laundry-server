@@ -1,0 +1,23 @@
+{
+  "name": "power-anomaly-detector",
+  "version": "1.0.0",
+  "description": "Lambda function to detect power anomalies and send email alerts",
+  "main": "power-anomaly-detector.js",
+  "scripts": {
+    "test": "node test-lambda.js",
+    "package": "zip -r power-anomaly-detector.zip power-anomaly-detector.js node_modules package.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ses": "^3.0.0"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "aws",
+    "lambda",
+    "iot",
+    "ses",
+    "monitoring"
+  ],
+  "author": "",
+  "license": "ISC"
+}
