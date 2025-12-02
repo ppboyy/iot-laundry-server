@@ -16,10 +16,10 @@ const CONFIG = {
   WARNING_THRESHOLD: 800, // Send warning above this
   CRITICAL_THRESHOLD: 1000, // Critical alert level
   
-  // Email configuration
-  SES_REGION: 'ap-southeast-1', // Change to your SES region
-  FROM_EMAIL: 'alerts@iotwasher.com', // Must be verified in SES
-  TO_EMAIL: 'owner@yourbusiness.com', // Business owner email
+  // Email configuration (UPDATE WITH YOUR EMAIL)
+  SES_REGION: 'ap-southeast-1', // Your AWS SES region
+  FROM_EMAIL: 'weipingchan2000@gmail.com', // ⚠️ Replace with YOUR email and verify in SES
+  TO_EMAIL: 'chanweiping1@gmail.com', // ⚠️ Can be same email (verify in SES)
   
   // Alert cooldown (prevent spam)
   COOLDOWN_MINUTES: 15,
