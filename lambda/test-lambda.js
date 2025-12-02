@@ -4,18 +4,6 @@
  * Run: node test-lambda.js
  */
 
-// Mock AWS SDK for local testing
-const mockSES = {
-  send: async (command) => {
-    console.log('\n📧 [MOCK] Email would be sent with:');
-    console.log('  From:', command.input.Source);
-    console.log('  To:', command.input.Destination.ToAddresses.join(', '));
-    console.log('  Subject:', command.input.Message.Subject.Data);
-    console.log('  HTML Body Length:', command.input.Message.Body.Html.Data.length, 'chars');
-    return { MessageId: 'mock-message-id-12345' };
-  }
-};
-
 // Mock the AWS SDK module
 const Module = require('module');
 const originalRequire = Module.prototype.require;
@@ -26,6 +14,14 @@ Module.prototype.require = function(id) {
       SESClient: class MockSESClient {
         constructor(config) {
           console.log('📧 Mock SES Client initialized with region:', config.region);
+        }
+        async send(command) {
+          console.log('\n📧 [MOCK] Email would be sent with:');
+          console.log('  From:', command.input.Source);
+          console.log('  To:', command.input.Destination.ToAddresses.join(', '));
+          console.log('  Subject:', command.input.Message.Subject.Data);
+          console.log('  HTML Body Length:', command.input.Message.Body.Html.Data.length, 'chars');
+          return { MessageId: 'mock-message-id-12345' };
         }
       },
       SendEmailCommand: class MockSendEmailCommand {
@@ -40,10 +36,6 @@ Module.prototype.require = function(id) {
 
 // Load the Lambda function
 const lambda = require('./power-anomaly-detector.js');
-
-// Override sesClient with mock
-const { SESClient } = require('@aws-sdk/client-ses');
-lambda.sesClient = mockSES;
 
 // Test cases
 const testCases = [
